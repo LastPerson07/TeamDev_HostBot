@@ -1,0 +1,16 @@
+[Unit]
+Description=Telegram Project Hosting Bot By [TeamDev](https://team_x_og)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/telegram-host-bot
+ExecStart=/usr/bin/docker-compose up
+ExecStop=/usr/bin/docker-compose down
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

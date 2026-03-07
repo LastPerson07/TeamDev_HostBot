@@ -1,0 +1,47 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    openssh-server \
+    sudo \
+    curl \
+    wget \
+    git \
+    python3 \
+    python3-pip \
+    nodejs \
+    npm \
+    nano \
+    vim \
+    htop \
+    net-tools \
+    unzip \
+    screen \
+    tmux \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -s /bin/bash vpsuser && \
+    echo "vpsuser ALL=(ALL) NOPASSWD: NOPASSWD" > /etc/sudoers.d/vpsuser_block && \
+    chmod 440 /etc/sudoers.d/vpsuser_block
+
+RUN echo "vpsuser ALL=(ALL) !ALL" >> /etc/sudoers && \
+    visudo -c
+
+RUN chmod 000 /usr/bin/su && \
+    chmod 000 /bin/su || true
+
+RUN mkdir /var/run/sshd && \
+    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config && \
+    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+    echo "AllowUsers vpsuser" >> /etc/ssh/sshd_config && \
+    echo "MaxSessions 3" >> /etc/ssh/sshd_config && \
+    echo "ClientAliveInterval 300" >> /etc/ssh/sshd_config && \
+    echo "ClientAliveCountMax 2" >> /etc/ssh/sshd_config
+
+COPY vps-entrypoint.sh /usr/local/bin/vps-entrypoint.sh
+RUN chmod +x /usr/local/bin/vps-entrypoint.sh
+
+EXPOSE 22
+
+CMD ["/usr/local/bin/vps-entrypoint.sh"]
