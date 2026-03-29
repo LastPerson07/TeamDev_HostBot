@@ -46,7 +46,7 @@ import psutil
 import shutil
 import requests
 import html
-import docker as docker_sdk
+# docker_sdk removed — Railway uses process-based management
 
 BOT_TOKEN  = os.environ.get("BOT_TOKEN")
 MONGODB_URI = os.environ.get("MONGODB_URI")
@@ -62,7 +62,7 @@ docker_manager = DockerManager(db)
 vps_manager    = VpsManager(db, host_ip=VPS_HOST_IP)
 rate_limiter   = RateLimiter(db)
 logger         = BotLogger(bot, LOG_CHANNEL_ID)
-docker_client  = docker_sdk.from_env()
+docker_client  = None  # Not used on Railway
 
 bot_info     = bot.get_me()
 BOT_USERNAME = bot_info.username
@@ -212,8 +212,8 @@ def start_command(message):
 
 <b>{req} 𝑹𝒆𝒒𝒖𝒊𝒓𝒆𝒎𝒆𝒏𝒕𝒔</b>
 𝚈𝙾𝚄𝚁 <b>.zip</b> 𝙼𝚄𝚂𝚃 𝙲𝙾𝙽𝚃𝙰𝙸𝙽
-{check} <b>Dockerfile</b>
-{check} <b>requirements.txt</b>
+{check} <b>bot.py</b> ᴏʀ <b>main.py</b>
+{check} <b>requirements.txt</b> (ʀᴇᴄᴏᴍᴍᴇɴᴅᴇᴅ)
 
 Vɪᴅᴇᴏ Hᴇʟᴘ = https://t.me/TEAM_x_OG/108421
 
@@ -370,8 +370,8 @@ def upload_command(message):
 {upload} 𝑼𝒑𝒍𝒐𝒂𝒅 𝒀𝒐𝒖𝒓 𝑷𝒓𝒐𝒋𝒆𝒄𝒕
 
 Pʟᴇᴀsᴇ Sᴇɴᴅ Mᴇ A .zip Fɪʟᴇ Cᴏɴᴛᴀɪɴɪɴɢ
-{check} <code>Dockerfile</code>
-{check} <code>requirements.txt</code>
+{check} <code>bot.py</code> ᴏʀ <code>main.py</code>
+{check} <code>requirements.txt</code> (ᴏᴘᴛɪᴏɴᴀʟ)
 {check} <b>Yᴏᴜʀ Pʏᴛʜᴏɴ Bᴏᴛ Fɪʟᴇs</b>
 
 <b>Mᴀx Sɪᴢᴇ</b> {limits['max_upload_size'] // (1024*1024)}MB
@@ -418,17 +418,16 @@ def process_upload(message, limits):
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(extract_dir)
 
-        has_dockerfile = has_requirements = False
+        has_main_py   = False
+        has_requirements = False
         for root, dirs, files in os.walk(extract_dir):
-            if 'Dockerfile'       in files: has_dockerfile   = True
             if 'requirements.txt' in files: has_requirements = True
+            for f in files:
+                if f.endswith('.py'): has_main_py = True
 
-        if not has_dockerfile or not has_requirements:
-            missing_list = []
-            if not has_dockerfile:   missing_list.append('Dockerfile')
-            if not has_requirements: missing_list.append('requirements.txt')
+        if not has_main_py:
             bot.edit_message_text(
-                f"{missing} Mɪssɪɴɢ Rᴇϙᴜɪʀᴇᴅ Fɪʟᴇs: {', '.join(missing_list)}\n\n𝙿𝙻𝙴𝙰𝚂𝙴 𝙰𝙳𝙳 𝚃𝙷𝙴𝚂𝙴 𝙵𝙸𝙻𝙴𝚂 𝙰𝙽𝙳 𝚁𝙴-𝚄𝙿𝙻𝙾𝙰𝙳!",
+                f"{missing} Nᴏ Pʏᴛʜᴏɴ Fɪʟᴇs Fᴏᴜɴᴅ!\n\nYᴏᴜʀ .zip ᴍᴜsᴛ ᴄᴏɴᴛᴀɪɴ ᴀᴛ ʟᴇᴀsᴛ ᴏɴᴇ .py ғɪʟᴇ (bot.py, main.py ᴇᴛᴄ.)",
                 message.chat.id, status_msg.message_id
             )
             shutil.rmtree(temp_dir); return
@@ -562,14 +561,13 @@ def process_github_clone(message, limits):
                 shutil.rmtree(temp_dir); return
 
         bot.edit_message_text(f"{validate} Vᴀʟɪᴅᴀᴛɪɴɢ Fɪʟᴇs...", message.chat.id, status_msg.message_id)
-        has_dockerfile   = os.path.exists(os.path.join(clone_dir, 'Dockerfile'))
-        has_requirements = os.path.exists(os.path.join(clone_dir, 'requirements.txt'))
+        has_py_file = any(f.endswith('.py') for f in os.listdir(clone_dir))
 
-        if not has_dockerfile or not has_requirements:
-            missing_list = []
-            if not has_dockerfile:   missing_list.append('Dockerfile')
-            if not has_requirements: missing_list.append('requirements.txt')
-            bot.edit_message_text(f"{missing} Mɪssɪɴɢ Rᴇϙᴜɪʀᴇᴅ Fɪʟᴇs: {', '.join(missing_list)}", message.chat.id, status_msg.message_id)
+        if not has_py_file:
+            bot.edit_message_text(
+                f"{missing} Nᴏ Pʏᴛʜᴏɴ Fɪʟᴇs Fᴏᴜɴᴅ ɪɴ ʀᴇᴘᴏ ʀᴏᴏᴛ!\n\nMake sure bot.py / main.py exists.",
+                message.chat.id, status_msg.message_id
+            )
             shutil.rmtree(temp_dir); return
 
         bot.edit_message_text(f"{security} Sᴇᴄᴜʀɪᴛʏ Sᴄᴀɴɴɪɴɢ...", message.chat.id, status_msg.message_id)
@@ -811,7 +809,7 @@ def help_command(message):
 {check} /start — Sᴛᴀʀᴛ Oᴠᴇʀ
 
 {req} 𝐔𝐩𝐥𝐨𝐚𝐝 𝐑𝐞𝐪𝐮𝐢𝐫𝐞𝐦𝐞𝐧𝐭𝐬
-• <code>Dockerfile</code> + <code>requirements.txt</code>
+• <code>bot.py</code> or <code>main.py</code> + <code>requirements.txt</code>
 
 {security} 𝐒𝐞𝐜𝐮𝐫𝐢𝐭𝐲
 Aʟʟ Fɪʟᴇs Aʀᴇ Sᴄᴀɴɴᴇᴅ Fᴏʀ Mᴀʟᴡᴀʀᴇ / DDoS / Mɪɴᴇʀs
@@ -1231,11 +1229,7 @@ def server_info(message):
     disk = psutil.disk_usage('/')
     boot = psutil.boot_time()
     uptime_h = int(time.time() - boot) // 3600
-    try:
-        containers = docker_client.containers.list()
-        total_containers = len(containers)
-    except:
-        total_containers = 0
+    total_containers = len(docker_manager._pids)  # running processes
 
     text = f"""
 💻 <b>Server Information</b>
@@ -1998,22 +1992,12 @@ def _do_exec(message, project, cmd):
     user_id    = message.from_user.id
     status_msg = bot.reply_to(message, f"💻 Exᴇᴄᴜᴛɪɴɢ... {load}")
     try:
-        container  = docker_client.containers.get(project['container_id'])
-        exec_result = container.exec_run(
-            cmd=['sh', '-c', cmd],
-            user='nobody',
-            workdir='/app',
-            demux=True,
-            environment={'HOME': '/tmp'},
-        )
-        stdout = exec_result.output[0] or b''
-        stderr = exec_result.output[1] or b''
-        output = (stdout + stderr).decode('utf-8', errors='replace')
-        exit_code = exec_result.exit_code
-
+        exit_code, output, error = docker_manager.exec_in_project(project['container_id'], cmd)
+        if error and not output:
+            bot.edit_message_text(f"{err} Exec Error: {html.escape(error)}", message.chat.id, status_msg.message_id)
+            return
         if len(output) > 3500:
             output = output[-3500:] + "\n... (ᴛʀᴜɴᴄᴀᴛᴇᴅ)"
-
         icon = "✅" if exit_code == 0 else "⚠️"
         result_text = (
             f"💻 <b>Exec Result</b> {icon}\n\n"
@@ -2024,8 +2008,6 @@ def _do_exec(message, project, cmd):
         )
         bot.edit_message_text(result_text, message.chat.id, status_msg.message_id, parse_mode="HTML")
         logger.log_action(user_id, "exec_command", {"project": project['name'], "cmd": cmd, "exit_code": exit_code})
-    except docker_sdk.errors.NotFound:
-        bot.edit_message_text(f"{err} Cᴏɴᴛᴀɪɴᴇʀ ɴᴏᴛ ғᴏᴜɴᴅ. ɪs ᴛʜᴇ ᴘʀᴏᴊᴇᴄᴛ ʀᴜɴɴɪɴɢ?", message.chat.id, status_msg.message_id)
     except Exception as e:
         bot.edit_message_text(f"{err} Exᴇᴄ Eʀʀᴏʀ: {html.escape(str(e))}", message.chat.id, status_msg.message_id)
 
@@ -2104,38 +2086,25 @@ def _process_replace_file(message, user_id):
         file_info = bot.get_file(message.document.file_id)
         file_data = bot.download_file(file_info.file_path)
 
-        import tempfile as _tmpfile
-        tmp = _tmpfile.NamedTemporaryFile(delete=False, suffix='_' + file_name)
-        tmp.write(file_data)
-        tmp.close()
-
-        container = docker_client.containers.get(project['container_id'])
-
-        import tarfile, io
-        tar_buf = io.BytesIO()
-        with tarfile.open(fileobj=tar_buf, mode='w') as tar:
-            tarinfo        = tarfile.TarInfo(name=file_name)
-            tarinfo.size   = len(file_data)
-            tarinfo.mode   = 0o644
-            tar.addfile(tarinfo, io.BytesIO(file_data))
-        tar_buf.seek(0)
-
-        container.put_archive('/app', tar_buf)
-        os.unlink(tmp.name)
-
-        container.restart(timeout=10)
+        success, error = docker_manager.replace_file_in_project(
+            project['container_id'], file_name, file_data
+        )
         db.update_project(str(project['_id']), {'status': 'running'})
 
-        bot.edit_message_text(
-            f"✅ <b>Fɪʟᴇ Rᴇᴘʟᴀᴄᴇᴅ!</b>\n\n"
-            f"{check} Fɪʟᴇ: <code>{html.escape(file_name)}</code>\n"
-            f"{check} Pʀᴏᴊᴇᴄᴛ: <code>{project['name']}</code>\n\n"
-            f"Cᴏɴᴛᴀɪɴᴇʀ ʜᴀs ʙᴇᴇɴ ʀᴇsᴛᴀʀᴛᴇᴅ ᴡɪᴛʜ ᴛʜᴇ ɴᴇᴡ ғɪʟᴇ. 🚀",
-            message.chat.id, status_msg.message_id, parse_mode="HTML"
-        )
-        logger.log_action(user_id, "file_replaced", {"project": project['name'], "file": file_name})
-    except docker_sdk.errors.NotFound:
-        bot.edit_message_text(f"{err} Cᴏɴᴛᴀɪɴᴇʀ ɴᴏᴛ ғᴏᴜɴᴅ.", message.chat.id, status_msg.message_id)
+        if success:
+            bot.edit_message_text(
+                f"✅ <b>Fɪʟᴇ Rᴇᴘʟᴀᴄᴇᴅ!</b>\n\n"
+                f"{check} Fɪʟᴇ: <code>{html.escape(file_name)}</code>\n"
+                f"{check} Pʀᴏᴊᴇᴄᴛ: <code>{project['name']}</code>\n\n"
+                f"Pʀᴏᴊᴇᴄᴛ ʀᴇsᴛᴀʀᴛᴇᴅ ᴡɪᴛʜ ᴛʜᴇ ɴᴇᴡ ғɪʟᴇ. 🚀",
+                message.chat.id, status_msg.message_id, parse_mode="HTML"
+            )
+            logger.log_action(user_id, "file_replaced", {"project": project['name'], "file": file_name})
+        else:
+            bot.edit_message_text(
+                f"{err} <b>Rᴇᴘʟᴀᴄᴇ Eʀʀᴏʀ</b>\n\n<code>{html.escape(str(error))}</code>",
+                message.chat.id, status_msg.message_id, parse_mode="HTML"
+            )
     except Exception as ex:
         bot.edit_message_text(f"{err} <b>Rᴇᴘʟᴀᴄᴇ Eʀʀᴏʀ</b>\n\n<code>{html.escape(str(ex))}</code>",
             message.chat.id, status_msg.message_id, parse_mode="HTML")
@@ -2245,8 +2214,7 @@ def _apply_env(message_or_call, project, env_key, env_val):
             bot.reply_to(message_or_call, text)
 
     try:
-        container = docker_client.containers.get(project['container_id'])
-        env_vars  = project.get('env_vars', {})
+        env_vars = project.get('env_vars', {})
 
         if env_val == "":
             env_vars.pop(env_key, None)
@@ -2256,28 +2224,18 @@ def _apply_env(message_or_call, project, env_key, env_val):
             action_text = f"✅ <b>Sᴇᴛ</b> <code>{env_key}</code> = <code>{html.escape(env_val)}</code>"
 
         db.update_project(str(project['_id']), {'env_vars': env_vars})
+        success, error = docker_manager.update_env_in_project(project['container_id'], env_vars)
 
-        import io, tarfile
-        env_content = "\n".join(f"{k}={v}" for k, v in env_vars.items()) + "\n"
-        tar_buf = io.BytesIO()
-        with tarfile.open(fileobj=tar_buf, mode='w') as tar:
-            data      = env_content.encode()
-            tarinfo   = tarfile.TarInfo(name='.env')
-            tarinfo.size = len(data)
-            tar.addfile(tarinfo, io.BytesIO(data))
-        tar_buf.seek(0)
-        container.put_archive('/app', tar_buf)
-        container.restart(timeout=10)
-
-        _send(
-            f"⚙️ <b>Eɴᴠ Uᴘᴅᴀᴛᴇᴅ</b>\n\n"
-            f"{action_text}\n"
-            f"{check} Pʀᴏᴊᴇᴄᴛ: <code>{project['name']}</code>\n\n"
-            f"Cᴏɴᴛᴀɪɴᴇʀ ʀᴇsᴛᴀʀᴛᴇᴅ ᴡɪᴛʜ ᴜᴘᴅᴀᴛᴇᴅ ᴇɴᴠ ✅"
-        )
-        logger.log_action(user_id, "env_updated", {"project": project['name'], "key": env_key, "deleted": env_val == ""})
-    except docker_sdk.errors.NotFound:
-        _send(f"{err} Cᴏɴᴛᴀɪɴᴇʀ ɴᴏᴛ ғᴏᴜɴᴅ.")
+        if success:
+            _send(
+                f"⚙️ <b>Eɴᴠ Uᴘᴅᴀᴛᴇᴅ</b>\n\n"
+                f"{action_text}\n"
+                f"{check} Pʀᴏᴊᴇᴄᴛ: <code>{project['name']}</code>\n\n"
+                f"Pʀᴏᴊᴇᴄᴛ ʀᴇsᴛᴀʀᴛᴇᴅ ᴡɪᴛʜ ᴜᴘᴅᴀᴛᴇᴅ ᴇɴᴠ ✅"
+            )
+            logger.log_action(user_id, "env_updated", {"project": project['name'], "key": env_key, "deleted": env_val == ""})
+        else:
+            _send(f"{err} Eɴᴠ Eʀʀᴏʀ: {html.escape(str(error))}")
     except Exception as ex:
         _send(f"{err} Eɴᴠ Eʀʀᴏʀ: {html.escape(str(ex))}")
 
